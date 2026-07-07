@@ -1,0 +1,19 @@
+{
+  "name": "lambda-file-exchanger",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "A website to manage files of lambda userland",
+  "dependencies": {
+    "upsilon.js": "github:Yaya-Cout/Upsilon.js#master"
+  },
+  "devDependencies": {
+    "vite": "^6.4.1"
+  }
+}

@@ -1,0 +1,33 @@
+#title_p{
+    background-color: rgb(74,197,20);
+    border-radius: 12px;
+    color: white;
+}
+
+body{
+    background-color: rgb(59, 59, 59);
+}
+
+main{
+    background-color: rgb(93, 93, 93);
+    border-radius: 12px;
+}
+
+footer{
+    background-color: rgb(74,197,20);
+    border-radius: 12px;
+}
+
+.title{
+    text-align: center;
+    color: white;
+}
+
+a{
+    color: rgb(255, 255, 255);
+}
+
+.color_grid{
+    background-color: rgb(74,197,20);
+    border-radius: 12px;
+}

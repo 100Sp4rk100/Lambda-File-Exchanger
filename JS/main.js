@@ -1,5 +1,9 @@
 import Numworks from "upsilon.js";
 
+const MAGIC = 0xEE0BDDBA;
+const uint32Size = 4;
+const nameSize = 16;
+const flagSize = 1;
 
 var calculator = new Numworks();
 var is_connected = false;
@@ -10,111 +14,104 @@ function calculator_connected(){
     calculator.stopAutoConnect();
 }
 
-calculator.autoConnect(calculator_connected);
+function getPadingForBufferSize(bufferSize){
+    return (4 - (bufferSize % 4)) % 4;
+}
 
-document.getElementById("a").addEventListener("click", async function (e){
-    if (is_connected){
-        const encoder = new TextEncoder();
-        const maxNameLength = 16;
+async function getInternal(){
+    if(is_connected){
+        //clear view
+        let files_list = document.getElementById("internal_files_list");
 
-        const files = [
-            { name: "a.a", content: "Contenu de mon fichier !" },
-            { name: "b.b", content: "Deuxieme fichier ici !" },
-            { name: "c.py", content: "print('Hello world de Lambda')" }
-        ];
-
-        let totalByteLength = 0;
-        const processedFiles = files.map(f => {
-            const nameBytes = encoder.encode(f.name);
-            const bufferBytes = encoder.encode(f.content);
-            const bufferSize = bufferBytes.length;
-
-            const paddingBuffer = (4 - (bufferSize % 4)) % 4;
-            
-            const fileTotalLength = 4 + 4 + maxNameLength + 4 + bufferSize + paddingBuffer;
-            
-            totalByteLength += fileTotalLength;
-
-            return {
-                nameBytes,
-                bufferBytes,
-                bufferSize,
-                paddingBuffer,
-                fileTotalLength
-            };
-        });
-
-        const buffer = new ArrayBuffer(totalByteLength);
-        const view = new DataView(buffer);
-        const uint8View = new Uint8Array(buffer);
-
-        let offset = 0;
-
-        for (const f of processedFiles) {
-            view.setUint32(offset, 0xEE0BDDBA, true);
-
-            view.setUint32(offset + 4, f.bufferSize, true);
-
-            for (let i = 0; i < maxNameLength; i++) {
-                uint8View[offset + 8 + i] = (i < f.nameBytes.length) ? f.nameBytes[i] : 0x00;
-            }
-
-            view.setUint32(offset + 8 + maxNameLength, 0x000000FF, true);
-
-            uint8View.set(f.bufferBytes, offset + 8 + maxNameLength + 4);
-
-            const padStart = offset + 8 + maxNameLength + 4 + f.bufferSize;
-            for (let i = 0; i < f.paddingBuffer; i++) {
-                uint8View[padStart + i] = 0x00;
-            }
-
-            offset += f.fileTotalLength;
+        while(files_list.firstChild) { 
+            files_list.removeChild(files_list.firstChild); 
         }
 
+        //read storage
         let pinfo = await calculator.getPlatformInfo();
         const startFlash = pinfo.external.flashStart + 327680;
+        const endFlash = pinfo.external.flashEnd;
+        const flashSize = endFlash - startFlash;
 
-        const dataToSend = new Uint8Array(buffer);
+        console.log("Reading storage")
+
+        let blobStorage = await calculator.__retrieveStorage(startFlash, flashSize, pinfo.version);
         
-        await calculator.__flashStorage(startFlash, dataToSend.buffer, pinfo.version);
+        console.log("Finding and cleaning files in storage")
 
-    } else {
+        const storageArrayBuffer = await blobStorage.arrayBuffer();
+        const dataView = new DataView(storageArrayBuffer);
+
+        let storage = {};
+
+        let adress = startFlash;
+        const minHeaderSize = uint32Size * 2 + nameSize + flagSize;
+
+        while (adress + minHeaderSize < endFlash){
+            let view_pos = adress - startFlash;
+
+            if (view_pos + minHeaderSize > storageArrayBuffer.byteLength) {
+                break;
+            }
+
+            let magic = dataView.getUint32(view_pos, true);
+            let current_buffer_size = dataView.getUint32(view_pos + uint32Size, true);
+            let flag = dataView.getUint8(view_pos + uint32Size * 2 + nameSize);
+
+            if (magic != MAGIC){
+                break;
+            }
+
+            if (flag != 0xFF){
+                adress += uint32Size * 2 + nameSize + 4 + current_buffer_size + getPadingForBufferSize(current_buffer_size);
+                continue;
+            }
+
+            if (adress + (uint32Size * 2) + nameSize + 4 + current_buffer_size 
+                + getPadingForBufferSize(current_buffer_size) > endFlash) {
+                break;
+            }
+
+            let nameBytes = new Uint8Array(storageArrayBuffer, view_pos + uint32Size * 2, nameSize);
+            let fileName = new TextDecoder().decode(nameBytes).replace(/\0/g, '');
+
+            console.log("Finding file : " + fileName);
+            addingInternalFile(fileName);
+
+            adress += (uint32Size * 2) + nameSize + 4 + current_buffer_size + getPadingForBufferSize(current_buffer_size);
+        }
+
+    }else{
+        alert("You need to connect your calculator !");
+
         calculator.detect(function() {
             calculator_connected();
         }, function(error) {
             alert("Error : " + error);
         });
     }
-});
+}
 
-document.getElementById("b").addEventListener("click", async function (e){
-    if (is_connected){
-        console.log("bbb")
+function addingInternalFile(name){
+    const files_list = document.getElementById("internal_files_list");
 
-        let pinfo = await calculator.getPlatformInfo();
-        const startFlash = pinfo.external.flashStart + 327680;
+    const container = document.createElement("div");
+    container.innerHTML = name;
 
-        const chunkSize = 64 * 1024; 
-        const eraseBuffer = new ArrayBuffer(chunkSize);
-        const eraseView = new Uint8Array(eraseBuffer);
-        eraseView.fill(0x00);
+    const download_btn = document.createElement("button");
+    download_btn.innerHTML = "Download";
+    download_btn.addEventListener("click", function(){}); //dowload file
 
-        const totalSizeToErase = 832 * 1024; // 1 Mo
-        let currentOffset = 0;
+    const delete_btn = document.createElement("button");
+    delete_btn.innerHTML = "Delete";
+    delete_btn.addEventListener("click", function(){}); // delete file
 
-        while (currentOffset < totalSizeToErase) {
-            let targetAddress = startFlash + currentOffset;
-            
-            await calculator.__flashStorage(targetAddress, eraseView.buffer, pinfo.version);
-            currentOffset += chunkSize;
-        }
+    container.appendChild(download_btn);
+    container.appendChild(delete_btn);
 
-    } else {
-        calculator.detect(function() {
-            calculator_connected();
-        }, function(error) {
-            console.error("Erreur de connexion :", error);
-            alert("Erreur : " + error);
-        });
-    }
-});
+    files_list.appendChild(container);
+}
+
+calculator.autoConnect(calculator_connected);
+
+document.getElementById("load_internal_files").addEventListener("click", getInternal);

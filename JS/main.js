@@ -8,7 +8,30 @@ const flagSize = 1;
 var calculator = new Numworks();
 var is_connected = false;
 
-let storage = [];
+let internalStorage = [];
+let externalStorage = [];
+
+const originalLog = console.log;
+
+function log_function(...args){
+    originalLog.apply(console, args);
+
+    const message = args.map(arg => {
+        try {
+            return typeof arg === "object" ? JSON.stringify(arg, null, 2) : String(arg);
+        } catch {
+            return String(arg);
+        }
+    }).join(" ");
+
+    const consoleDiv = document.getElementById("console");
+    if (consoleDiv) {
+        const line = document.createElement("div");
+        line.textContent = message;
+        consoleDiv.appendChild(line);
+        consoleDiv.scrollTop = consoleDiv.scrollHeight;
+    }
+}
 
 function calculator_connected(){
     console.log("Connected");
@@ -16,6 +39,7 @@ function calculator_connected(){
     calculator.stopAutoConnect();
 }
 
+// INTERNAL FUNCTIONS
 function getPadingForBufferSize(bufferSize){
     return (4 - (bufferSize % 4)) % 4;
 }
@@ -37,7 +61,7 @@ async function getInternal(){
         const storageArrayBuffer = await blobStorage.arrayBuffer();
         const dataView = new DataView(storageArrayBuffer);
 
-        storage = [];
+        internalStorage = [];
 
         let adress = startFlash;
         const minHeaderSize = uint32Size * 2 + nameSize + flagSize;
@@ -90,7 +114,7 @@ async function getInternal(){
 
             const fileBuffer = storageArrayBuffer.slice(contentOffset, contentOffset + actualSize);
 
-            storage.push([fileName, new Blob([fileBuffer], { type: "text/plain" })]);
+            internalStorage.push([fileName, new Blob([fileBuffer], { type: "text/plain" })]);
 
             adress += (uint32Size * 2) + nameSize + 4 + current_buffer_size + getPadingForBufferSize(current_buffer_size);
         }
@@ -110,7 +134,7 @@ async function getInternal(){
 
 async function uploadInternal(){
     if(is_connected){
-        if (storage.length == 0){
+        if (internalStorage.length == 0){
             alert("You need to load your files first !");
             return;
         }
@@ -131,7 +155,7 @@ async function uploadInternal(){
 
         let position = 0;
 
-        for (const data of storage) {
+        for (const data of internalStorage) {
             const name = data[0];
             const blob = data[1];
             const buffer_size = (uint32Size * 2) + nameSize + 4;
@@ -193,7 +217,7 @@ function addingInternalFile(name, index){
     const download_btn = document.createElement("button");
     download_btn.innerHTML = "Download";
     download_btn.addEventListener("click", function(){
-        const blob = storage[index][1];
+        const blob = internalStorage[index][1];
         if (!blob){
             return;
         }
@@ -209,7 +233,7 @@ function addingInternalFile(name, index){
     const delete_btn = document.createElement("button");
     delete_btn.innerHTML = "Delete";
     delete_btn.addEventListener("click", function(){
-        storage.splice(index, 1);
+        internalStorage.splice(index, 1);
         reloadInternalFileView();
     }); // delete file
 
@@ -230,7 +254,7 @@ function reloadInternalFileView(){
     }
 
     // fill view
-    storage.forEach(function(data, i) {
+    internalStorage.forEach(function(data, i) {
         addingInternalFile(data[0], i);
     })
 }
@@ -238,7 +262,7 @@ function reloadInternalFileView(){
 function uploadFileInternal(e){
     let name = e.target.files[0].name;
     let blob = e.target.files[0];
-    storage.push([name, blob]);
+    internalStorage.push([name, blob]);
 
     reloadInternalFileView();
     e.target.value = "";
@@ -266,7 +290,7 @@ async function formatInternal(){
             console.log("Format completed");
             alert("Format completed !");
 
-            storage = [];
+            internalStorage = [];
             reloadInternalFileView();
         } catch (err) {
             console.error("Flashing error:", err);
@@ -284,9 +308,190 @@ async function formatInternal(){
     }
 }
 
+// EXTERNAL FUNCTIONS
+async function getExternal(){
+    if(is_connected){
+        //read storage
+        console.log("Reading storage");
+        externalStorage = await calculator.backupStorage();
+
+        for (var i in externalStorage.records) {
+            var record = externalStorage.records[i];
+            var name = record.name + "." + record.type;
+
+            console.log("Finding file : " + name);
+        }
+
+        reloadExternalFileView();
+
+    }else{
+        alert("You need to connect your calculator !");
+
+        calculator.detect(function() {
+            calculator_connected();
+        }, function(error) {
+            alert("Error : " + error);
+        });
+    }
+}
+
+async function uploadExternal(){
+    if(is_connected){
+        if (externalStorage.length == 0){
+            alert("You need to load your files first !");
+            return;
+        }
+
+        //upload storage
+        console.log("Upload storage");
+
+        await calculator.installStorage(externalStorage, function() {
+            console.log("Files installed successfully");
+            alert("Files successfully synchronized !");
+        });
+
+    }else{
+        alert("You need to connect your calculator !");
+
+        calculator.detect(function() {
+            calculator_connected();
+        }, function(error) {
+            alert("Error : " + error);
+        });
+    }
+}
+
+function addingExternalFile(name){
+    const files_list = document.getElementById("external_files_list");
+
+    const container = document.createElement("div");
+    container.innerHTML = name;
+
+    const download_btn = document.createElement("button");
+    download_btn.innerHTML = "Download";
+    download_btn.addEventListener("click", function(){
+        for (var i in externalStorage.records) {
+            var record = externalStorage.records[i];
+            var record_name = record.name + "." + record.type;
+
+            if (record_name == name){
+                const blob = record.data;
+
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = name;
+                a.click();
+                URL.revokeObjectURL(url);
+
+                return;
+            }
+        }
+    }); //dowload file
+
+    const delete_btn = document.createElement("button");
+    delete_btn.innerHTML = "Delete";
+    delete_btn.addEventListener("click", function(){
+        for (var i in externalStorage.records) {
+            var record = externalStorage.records[i];
+            var record_name = record.name + "." + record.type;
+
+            if (record_name == name){
+                externalStorage.records.splice(i, 1);
+                reloadExternalFileView();
+                return;
+            }
+        }
+    }); // delete file
+
+    container.appendChild(download_btn);
+    container.appendChild(delete_btn);
+    container.appendChild(document.createElement("br"));
+    container.appendChild(document.createElement("br"));
+
+    files_list.appendChild(container);
+}
+
+function reloadExternalFileView(){
+    //clear view
+    let files_list = document.getElementById("external_files_list");
+
+    while(files_list.firstChild) { 
+        files_list.removeChild(files_list.firstChild); 
+    }
+
+    // fill view
+    for (var i in externalStorage.records) {
+        var record = externalStorage.records[i];
+        var record_name = record.name + "." + record.type;
+
+        addingExternalFile(record_name);
+    }
+}
+
+function uploadFileExternal(e){
+    let name = e.target.files[0].name;
+    let blob = e.target.files[0];
+
+    let lastDotIndex = name.lastIndexOf(".");
+    
+    let name_without_extension = lastDotIndex !== -1 ? name.substring(0, lastDotIndex) : name;
+    let extension = lastDotIndex !== -1 ? name.substring(lastDotIndex + 1) : "";
+
+    externalStorage.records.push({
+        "name": name_without_extension, 
+        "type": extension, 
+        "autoImport": false, 
+        "data": blob
+    });
+
+    reloadExternalFileView();
+    e.target.value = "";
+}
+
+async function formatExternal(){
+    if(is_connected){
+        if (externalStorage.length == 0){
+            alert("You need to load your files first !");
+            return;
+        }
+
+        externalStorage.records = externalStorage.records.filter(record => {
+            var record_name = record.name + (record.type ? "." + record.type : "");
+            return record_name === "pr.sys" || record_name === "gp.sys";
+        });
+
+        //upload storage
+        console.log("Format storage");
+
+        await calculator.installStorage(externalStorage, function() {
+            console.log("Format completed");
+            alert("Format completed !");
+
+            reloadExternalFileView();
+        });
+
+    }else{
+        alert("You need to connect your calculator !");
+
+        calculator.detect(function() {
+            calculator_connected();
+        }, function(error) {
+            alert("Error : " + error);
+        });
+    }
+}
+
+console.log = log_function;
+
 calculator.autoConnect(calculator_connected);
 
 document.getElementById("load_internal_files").addEventListener("click", getInternal);
 document.getElementById("sync_internal_files").addEventListener("click", uploadInternal);
 document.getElementById("format_internal").addEventListener("click", formatInternal);
 document.getElementById("upload_internal").addEventListener("change", uploadFileInternal);
+
+document.getElementById("load_external_files").addEventListener("click", getExternal);
+document.getElementById("sync_external_files").addEventListener("click", uploadExternal);
+document.getElementById("format_external").addEventListener("click", formatExternal);
+document.getElementById("upload_external").addEventListener("change", uploadFileExternal);

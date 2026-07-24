@@ -17,8 +17,17 @@
         </div>
         <main>
             <h1 class="title">External files</h1>
+            <button id="load_external_files">Loads files</button>
+            <button id="sync_external_files">Syncronise files</button>
+            <button id="format_external">Format</button>
+            <label for="upload_external" id="upload_external_txt" class="file_input_label">Upload a file</label>
+            <input type="file" id="upload_external">
+            <br>
+            <br>
             <section class="color_grid">
-                test
+                <div id="external_files_list">
+                    <br>
+                </div>
             </section>
             <br>
             <h1 class="title">Internal files</h1>
@@ -33,6 +42,11 @@
                 <div id="internal_files_list">
                     <br>
                 </div>
+            </section>
+            <br>
+            Console :
+            <section class="style_part">
+                <div id="console" style="overflow:scroll; height:400px;"></div>
             </section>
         </main>
         <br>

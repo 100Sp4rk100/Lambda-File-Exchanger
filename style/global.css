@@ -31,3 +31,28 @@ a{
     background-color: rgb(74,197,20);
     border-radius: 12px;
 }
+
+.file_input_label {
+  padding: 8px 16px;
+  background: rgb(102,237,42);
+  color: white;
+  cursor: pointer;
+  border-radius: 121px;
+}
+
+input[type="file"] {
+  display: none;
+}
+
+button {
+  background-color: rgb(102,237,42);
+  border: none;
+  color: white;
+  padding: 10px 24px;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+  font-size: 16px;
+  cursor: pointer;
+  border-radius: 12px;
+}

@@ -8,7 +8,7 @@ const flagSize = 1;
 var calculator = new Numworks();
 var is_connected = false;
 
-let storage = {};
+let storage = [];
 
 function calculator_connected(){
     console.log("Connected");
@@ -37,7 +37,7 @@ async function getInternal(){
         const storageArrayBuffer = await blobStorage.arrayBuffer();
         const dataView = new DataView(storageArrayBuffer);
 
-        storage = {};
+        storage = [];
 
         let adress = startFlash;
         const minHeaderSize = uint32Size * 2 + nameSize + flagSize;
@@ -90,7 +90,7 @@ async function getInternal(){
 
             const fileBuffer = storageArrayBuffer.slice(contentOffset, contentOffset + actualSize);
 
-            storage[fileName] = new Blob([fileBuffer], { type: "text/plain" });
+            storage.push([fileName, new Blob([fileBuffer], { type: "text/plain" })]);
 
             adress += (uint32Size * 2) + nameSize + 4 + current_buffer_size + getPadingForBufferSize(current_buffer_size);
         }
@@ -110,7 +110,7 @@ async function getInternal(){
 
 async function uploadInternal(){
     if(is_connected){
-        if (Object.keys(storage).length == 0){
+        if (storage.length == 0){
             alert("You need to load your files first !");
             return;
         }
@@ -127,13 +127,13 @@ async function uploadInternal(){
         const combinedBuffer = new Uint8Array(flashSize);
         combinedBuffer.fill(0xFF);
 
-        const keys = Object.keys(storage);
         const encoder = new TextEncoder();
 
         let position = 0;
 
-        for (const name of keys) {
-            const blob = storage[name];
+        for (const data of storage) {
+            const name = data[0];
+            const blob = data[1];
             const buffer_size = (uint32Size * 2) + nameSize + 4;
             const buffer = new Uint8Array(buffer_size);
             buffer.fill(0xFF);
@@ -184,7 +184,7 @@ async function uploadInternal(){
     }
 }
 
-function addingInternalFile(name){
+function addingInternalFile(name, index){
     const files_list = document.getElementById("internal_files_list");
 
     const container = document.createElement("div");
@@ -193,7 +193,7 @@ function addingInternalFile(name){
     const download_btn = document.createElement("button");
     download_btn.innerHTML = "Download";
     download_btn.addEventListener("click", function(){
-        const blob = storage[name];
+        const blob = storage[index][1];
         if (!blob){
             return;
         }
@@ -209,12 +209,14 @@ function addingInternalFile(name){
     const delete_btn = document.createElement("button");
     delete_btn.innerHTML = "Delete";
     delete_btn.addEventListener("click", function(){
-        delete storage[name];
+        storage.splice(index, 1);
         reloadInternalFileView();
     }); // delete file
 
     container.appendChild(download_btn);
     container.appendChild(delete_btn);
+    container.appendChild(document.createElement("br"));
+    container.appendChild(document.createElement("br"));
 
     files_list.appendChild(container);
 }
@@ -228,14 +230,63 @@ function reloadInternalFileView(){
     }
 
     // fill view
-    const keys = Object.keys(storage);
+    storage.forEach(function(data, i) {
+        addingInternalFile(data[0], i);
+    })
+}
 
-    keys.forEach(function(name, i) {
-        addingInternalFile(name);
-    });
+function uploadFileInternal(e){
+    let name = e.target.files[0].name;
+    let blob = e.target.files[0];
+    storage.push([name, blob]);
+
+    reloadInternalFileView();
+    e.target.value = "";
+}
+
+async function formatInternal(){
+    if(is_connected){
+        // get numworks infos
+        let pinfo = await calculator.getPlatformInfo();
+        const startFlash = pinfo.external.flashStart + 327680;
+        const endFlash = pinfo.external.flashEnd;
+        const flashSize = endFlash - startFlash;
+
+        //make buffer
+        console.log("Create buffer storage for format");
+
+        const buffer = new Uint8Array(flashSize);
+        buffer.fill(0xFF);
+
+        //upload storage
+        console.log("Upload buffer into storage");
+
+        try {
+            await calculator.__flashStorage(startFlash, buffer.buffer, pinfo.version);
+            console.log("Format completed");
+            alert("Format completed !");
+
+            storage = [];
+            reloadInternalFileView();
+        } catch (err) {
+            console.error("Flashing error:", err);
+            alert("Error during synchronization: " + err.message);
+        }
+
+    }else{
+        alert("You need to connect your calculator !");
+
+        calculator.detect(function() {
+            calculator_connected();
+        }, function(error) {
+            alert("Error : " + error);
+        });
+    }
 }
 
 calculator.autoConnect(calculator_connected);
 
 document.getElementById("load_internal_files").addEventListener("click", getInternal);
 document.getElementById("sync_internal_files").addEventListener("click", uploadInternal);
+document.getElementById("format_internal").addEventListener("click", formatInternal);
+document.getElementById("upload_internal").addEventListener("change", uploadFileInternal);

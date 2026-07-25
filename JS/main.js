@@ -11,6 +11,8 @@ var is_connected = false;
 let internalStorage = [];
 let externalStorage = [];
 
+let totalSize = 0;
+
 const originalLog = console.log;
 
 function log_function(...args){
@@ -33,10 +35,13 @@ function log_function(...args){
     }
 }
 
-function calculator_connected(){
+async function calculator_connected(){
     console.log("Connected");
     is_connected = true;
     calculator.stopAutoConnect();
+    
+    await getExternal();
+    //await getInternal();
 }
 
 // INTERNAL FUNCTIONS
@@ -52,7 +57,7 @@ async function getInternal(){
         const endFlash = pinfo.external.flashEnd;
         const flashSize = endFlash - startFlash;
 
-        console.log("Reading storage");
+        console.log("Reading internal storage");
 
         let blobStorage = await calculator.__retrieveStorage(startFlash, flashSize, pinfo.version);
         
@@ -312,7 +317,11 @@ async function formatInternal(){
 async function getExternal(){
     if(is_connected){
         //read storage
-        console.log("Reading storage");
+        console.log("Reading external storage");
+
+        let pinfo = await calculator.getPlatformInfo();
+        totalSize = pinfo["storage"]["size"];
+
         externalStorage = await calculator.backupStorage();
 
         for (var i in externalStorage.records) {
@@ -391,13 +400,16 @@ function addingExternalFile(name){
 
     const delete_btn = document.createElement("button");
     delete_btn.innerHTML = "Delete";
-    delete_btn.addEventListener("click", function(){
+    delete_btn.addEventListener("click", async function(){
         for (var i in externalStorage.records) {
             var record = externalStorage.records[i];
             var record_name = record.name + "." + record.type;
 
             if (record_name == name){
                 externalStorage.records.splice(i, 1);
+
+                await uploadExternal();
+
                 reloadExternalFileView();
                 return;
             }
@@ -420,16 +432,34 @@ function reloadExternalFileView(){
         files_list.removeChild(files_list.firstChild); 
     }
 
+    let size = 0;
+
     // fill view
     for (var i in externalStorage.records) {
         var record = externalStorage.records[i];
         var record_name = record.name + "." + record.type;
 
+        if (record.type == "py") {
+          size += record.code.length;
+          size += record.name.length + 1 + record.type.length;
+
+          // 8 bits header + 16 bits size + \0 name + \0 content
+          size += 1 + 2 + 1 + 1;
+        } else {
+          size += record.data.size;
+          size += record.name.length + 1 + record.type.length;
+          // 8 bits header + 16 bits size + \0 name
+          size += 1 + 2 + 1;
+        }
+
         addingExternalFile(record_name);
     }
+
+    const bar = document.getElementById("externalBar");
+    bar.style.width = Math.round((size / totalSize) * 100) + "%";
 }
 
-function uploadFileExternal(e){
+async function uploadFileExternal(e){
     let name = e.target.files[0].name;
     let blob = e.target.files[0];
 
@@ -438,12 +468,22 @@ function uploadFileExternal(e){
     let name_without_extension = lastDotIndex !== -1 ? name.substring(0, lastDotIndex) : name;
     let extension = lastDotIndex !== -1 ? name.substring(lastDotIndex + 1) : "";
 
-    externalStorage.records.push({
+    let newRecord = {
         "name": name_without_extension, 
         "type": extension, 
-        "autoImport": false, 
-        "data": blob
-    });
+        "autoImport": false
+    };
+
+    if (extension.toLowerCase() === "py") {
+        newRecord.code = await blob.text();
+    } else {
+        //let arrayBuffer = await blob.arrayBuffer();
+        newRecord.data = blob;
+    }
+
+    externalStorage.records.push(newRecord);
+
+    await uploadExternal();
 
     reloadExternalFileView();
     e.target.value = "";
@@ -486,12 +526,20 @@ console.log = log_function;
 
 calculator.autoConnect(calculator_connected);
 
-document.getElementById("load_internal_files").addEventListener("click", getInternal);
+navigator.usb.addEventListener("disconnect", function(e) {
+  calculator.onUnexpectedDisconnect(e, function() {
+    is_connected = false;
+    internalStorage = [];
+    externalStorage = [];
+    reloadInternalFileView();
+    reloadExternalFileView();
+    calculator.autoConnect(calculator_connected);
+  });
+});
+
+document.getElementById("format_external").addEventListener("click", formatExternal);
+document.getElementById("upload_external").addEventListener("change", uploadFileExternal);
+
 document.getElementById("sync_internal_files").addEventListener("click", uploadInternal);
 document.getElementById("format_internal").addEventListener("click", formatInternal);
 document.getElementById("upload_internal").addEventListener("change", uploadFileInternal);
-
-document.getElementById("load_external_files").addEventListener("click", getExternal);
-document.getElementById("sync_external_files").addEventListener("click", uploadExternal);
-document.getElementById("format_external").addEventListener("click", formatExternal);
-document.getElementById("upload_external").addEventListener("change", uploadFileExternal);

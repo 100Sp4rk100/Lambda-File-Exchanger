@@ -11,7 +11,9 @@ var is_connected = false;
 let internalStorage = [];
 let externalStorage = [];
 
-let totalSize = 0;
+let externalTotalSize = 0;
+let internalTotalSize = 0;
+let internalTotalDirtySize = 0;
 
 const originalLog = console.log;
 
@@ -41,7 +43,7 @@ async function calculator_connected(){
     calculator.stopAutoConnect();
     
     await getExternal();
-    //await getInternal();
+    await getInternal();
 }
 
 // INTERNAL FUNCTIONS
@@ -71,6 +73,9 @@ async function getInternal(){
         let adress = startFlash;
         const minHeaderSize = uint32Size * 2 + nameSize + flagSize;
 
+        internalTotalSize = flashSize;
+        internalTotalDirtySize = 0;
+
         while (adress + minHeaderSize < endFlash){
             let view_pos = adress - startFlash;
 
@@ -87,7 +92,10 @@ async function getInternal(){
             }
 
             if (flag != 0xFF){
-                adress += uint32Size * 2 + nameSize + 4 + current_buffer_size + getPadingForBufferSize(current_buffer_size);
+                let record_size = uint32Size * 2 + nameSize + 4 + current_buffer_size + getPadingForBufferSize(current_buffer_size);
+                
+                internalTotalDirtySize += record_size;
+                adress += record_size;
                 continue;
             }
 
@@ -119,9 +127,11 @@ async function getInternal(){
 
             const fileBuffer = storageArrayBuffer.slice(contentOffset, contentOffset + actualSize);
 
-            internalStorage.push([fileName, new Blob([fileBuffer], { type: "text/plain" })]);
+            let record_size = (uint32Size * 2) + nameSize + 4 + current_buffer_size + getPadingForBufferSize(current_buffer_size);
 
-            adress += (uint32Size * 2) + nameSize + 4 + current_buffer_size + getPadingForBufferSize(current_buffer_size);
+            internalStorage.push([fileName, new Blob([fileBuffer], { type: "text/plain" }), record_size]);
+
+            adress += record_size;
         }
 
         reloadInternalFileView();
@@ -217,7 +227,7 @@ function addingInternalFile(name, index){
     const files_list = document.getElementById("internal_files_list");
 
     const container = document.createElement("div");
-    container.innerHTML = name;
+    container.innerHTML = name + " ( " + internalStorage[index][2] + " o)";
 
     const download_btn = document.createElement("button");
     download_btn.innerHTML = "Download";
@@ -258,16 +268,41 @@ function reloadInternalFileView(){
         files_list.removeChild(files_list.firstChild); 
     }
 
+    let internalTotalFileSize = 0;
+
     // fill view
     internalStorage.forEach(function(data, i) {
         addingInternalFile(data[0], i);
+        internalTotalFileSize += data[2];
     })
+
+    const bar = document.getElementById("internalBar");
+    let percent = Math.round((internalTotalFileSize / internalTotalSize) * 100) + "%";
+    bar.innerHTML = percent;
+    bar.style.width = percent;
+
+    const bar_dirty = document.getElementById("internalDirtyBar");
+    let percent_dirty = Math.round((internalTotalDirtySize / internalTotalSize) * 100) + "%";
+    bar_dirty.innerHTML = percent_dirty;
+    bar_dirty.style.width = percent_dirty;
 }
 
 function uploadFileInternal(e){
     let name = e.target.files[0].name;
     let blob = e.target.files[0];
-    internalStorage.push([name, blob]);
+    let record_size = (uint32Size * 2) + nameSize + 4 + blob.size + getPadingForBufferSize(blob.size);
+    
+    let actual_size = 0;
+    internalStorage.forEach(function(data, i) {
+        actual_size += data[2];
+    })
+
+    if(actual_size + record_size > internalTotalSize){
+        alert("No enought space !");
+        return;
+    }
+
+    internalStorage.push([name, blob, record_size]);
 
     reloadInternalFileView();
     e.target.value = "";
@@ -320,7 +355,7 @@ async function getExternal(){
         console.log("Reading external storage");
 
         let pinfo = await calculator.getPlatformInfo();
-        totalSize = pinfo["storage"]["size"];
+        externalTotalSize = pinfo["storage"]["size"];
 
         externalStorage = await calculator.backupStorage();
 
@@ -346,7 +381,7 @@ async function getExternal(){
 
 async function uploadExternal(){
     if(is_connected){
-        if (externalStorage.length == 0){
+        if (!externalStorage || !externalStorage.records || externalStorage.records.length === 0){
             alert("You need to load your files first !");
             return;
         }
@@ -374,7 +409,35 @@ function addingExternalFile(name){
     const files_list = document.getElementById("external_files_list");
 
     const container = document.createElement("div");
-    container.innerHTML = name;
+
+    let record = null;
+
+    for (var i in externalStorage.records) {
+        record = externalStorage.records[i];
+        var record_name = record.name + "." + record.type;
+
+        if (record_name == name){
+            break;
+        }
+    }
+
+    let size = 0;
+
+    if (record.type == "py") {
+          size += record.code.length;
+          size += record.name.length + 1 + record.type.length;
+
+          // 8 bits header + 16 bits size + \0 name + \0 content
+          size += 1 + 2 + 1 + 1;
+        } else {
+          size += record.data.size;
+          size += record.name.length + 1 + record.type.length;
+          // 8 bits header + 16 bits size + \0 name
+          size += 1 + 2 + 1;
+    }
+
+
+    container.innerHTML = name + " ( " + size + " o)";
 
     const download_btn = document.createElement("button");
     download_btn.innerHTML = "Download";
@@ -409,6 +472,7 @@ function addingExternalFile(name){
                 externalStorage.records.splice(i, 1);
 
                 await uploadExternal();
+                await getExternal();
 
                 reloadExternalFileView();
                 return;
@@ -456,12 +520,44 @@ function reloadExternalFileView(){
     }
 
     const bar = document.getElementById("externalBar");
-    bar.style.width = Math.round((size / totalSize) * 100) + "%";
+    let percent = Math.round((size / externalTotalSize) * 100) + "%";
+    bar.innerHTML = percent;
+    bar.style.width = percent;
 }
 
 async function uploadFileExternal(e){
     let name = e.target.files[0].name;
     let blob = e.target.files[0];
+
+    let size = 0;
+
+    for (var i in externalStorage.records) {
+        var record = externalStorage.records[i];
+        var record_name = record.name + "." + record.type;
+
+        if(record_name == name){
+            alert("File already exist !");
+            return;
+        }
+
+        if (record.type == "py") {
+          size += record.code.length;
+          size += record.name.length + 1 + record.type.length;
+
+          // 8 bits header + 16 bits size + \0 name + \0 content
+          size += 1 + 2 + 1 + 1;
+        } else {
+          size += record.data.size;
+          size += record.name.length + 1 + record.type.length;
+          // 8 bits header + 16 bits size + \0 name
+          size += 1 + 2 + 1;
+        }
+    }
+
+    if (size + blob.size > externalTotalSize){
+        alert("No enought space !");
+        return;
+    }
 
     let lastDotIndex = name.lastIndexOf(".");
     
@@ -484,6 +580,7 @@ async function uploadFileExternal(e){
     externalStorage.records.push(newRecord);
 
     await uploadExternal();
+    await getExternal();
 
     reloadExternalFileView();
     e.target.value = "";
@@ -491,7 +588,7 @@ async function uploadFileExternal(e){
 
 async function formatExternal(){
     if(is_connected){
-        if (externalStorage.length == 0){
+        if (!externalStorage || !externalStorage.records || externalStorage.records.length === 0){
             alert("You need to load your files first !");
             return;
         }
@@ -543,3 +640,11 @@ document.getElementById("upload_external").addEventListener("change", uploadFile
 document.getElementById("sync_internal_files").addEventListener("click", uploadInternal);
 document.getElementById("format_internal").addEventListener("click", formatInternal);
 document.getElementById("upload_internal").addEventListener("change", uploadFileInternal);
+
+document.getElementById("connect").addEventListener("click", function(){
+    calculator.detect(function() {
+            calculator_connected();
+        }, function(error) {
+            alert("Error : " + error);
+        });
+})

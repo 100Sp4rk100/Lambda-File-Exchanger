@@ -7,3 +7,5 @@ It's available here : <a href="https://100sp4rk100.github.io/Lambda-File-Exchang
 This project is dual-licensed under:
 - [Upsilon.js](./LICENSE.txt)
 - [CC0](./LICENSE)
+
+Special thanks to [Yannis300307](https://github.com/yannis300307) for the CSS.

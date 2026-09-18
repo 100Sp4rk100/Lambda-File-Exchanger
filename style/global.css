@@ -1,30 +1,49 @@
-#title_p{
-    background-color: rgb(74,197,20);
+#title_p {
+    background-color: #3C5233;
     border-radius: 12px;
     color: white;
+    padding: 10pt;
+    margin-bottom: 15pt;
+    margin-top: 15pt;
 }
 
-body{
-    background-color: rgb(59, 59, 59);
+body {
+    margin: 0;
+    padding: 15pt;
+    color: white;
+    background-color: #0D1F22;
+    font-family: 'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif;
 }
 
-main{
-    background-color: rgb(93, 93, 93);
+main {
+    padding: 15pt;
+    background-color: #264027;
     border-radius: 12px;
+    box-shadow: 0 0 5pt 5pt rgba(2, 2, 2, 0.08);
 }
 
-footer{
-    background-color: rgb(74,197,20);
+footer {
+    background-color: #264027;
     border-radius: 12px;
+    padding: 10pt;
+}
+
+footer a {
+    margin: 5pt;
+    display: block;
 }
 
 .title{
     text-align: center;
-    color: white;
 }
 
-a{
+a {
     color: rgb(255, 255, 255);
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
 }
 
 .color_grid{

@@ -47,13 +47,14 @@ a:hover {
 }
 
 .color_grid{
-    background-color: rgb(74,197,20);
-    border-radius: 12px;
+  background-color: #3C5233;
+  border-radius: 12px;
+  color: white;
 }
 
 .file_input_label {
   padding: 8px 16px;
-  background: rgb(102,237,42);
+  background: #B38A58;
   color: white;
   cursor: pointer;
   border-radius: 121px;
@@ -64,16 +65,20 @@ input[type="file"] {
 }
 
 button {
-  background-color: rgb(102,237,42);
-  border: none;
-  color: white;
-  padding: 10px 24px;
-  text-align: center;
-  text-decoration: none;
-  display: inline-block;
-  font-size: 16px;
-  cursor: pointer;
-  border-radius: 12px;
+    background-color: #B38A58;
+    border: none;
+    color: white;
+    padding: 10px 24px;
+    text-align: center;
+    text-decoration: none;
+    display: inline-block;
+    font-size: 16px;
+    cursor: pointer;
+    border-radius: 12px;
+}
+
+button:hover {
+    outline: solid white 2px;
 }
 
 .barProgress {
